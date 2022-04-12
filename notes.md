@@ -146,10 +146,10 @@ Notese que `Item` y `User` deben estar definidos en algun lugar.
 
 ### Casteos distintos a los elementales
 El casteo de variables también es válido para:
-- `UUID` representado como `str` ej. `item_id: UUID`
-- `datetime` represantado como `str` en formato `YYYY-mm-ddTHH:MM:SS<tz>` ej. `start_date: datetime`
-- `date` represantado como `str` en formato `YYYY-mm-dd` ej. `start_date: date`
-- `time` represantado como `str` en formato `HH:MM:SS.ZZZ` ej. `start_date: time`
+- `UUID` representado como `str` → `item_id: UUID`
+- `datetime` represantado como `str` en formato `YYYY-mm-ddTHH:MM:SS<tz>` → `start_date: datetime`
+- `date` represantado como `str` en formato `YYYY-mm-dd` → `start_date: date`
+- `time` represantado como `str` en formato `HH:MM:SS.ZZZ` → `start_date: time`
 - `bytes` represantado como `str` en formato binario 
 - `Decimal` representado como `float`
 
@@ -189,4 +189,63 @@ Simplemente se importa `Form` de fastapi y al definirse los campos en la view, l
 @app.post("/login/")
 async def login(username: str = Form(...), password: str = Form(...)):
     return {"username": username}
+```
+## Files
+Para recibir archivos se utiliza `FileUpload` desde _fastapi_, y si se desea hacer validaciones, la clase `File` que funciona igual que `Field` y `Query`.
+
+#### ¿Por qué usar `UploadFile` en lugar de `bytes`?
+Primeramente por un tema de memoria, al ser leido como *bytes*, se almacenará en memoria todo el contenido, lo cual funcionará bien para elementos pequeños pero traerá problemas para elementos de mayor tamaño.
+
+Al trabajar con *UploadFile*, FastAPI decidirá en donde almacenarlo (ya sea en disco o en memoria) dependiendo de su tamaño. El tipo de objeto es un *file-like*, es decir, se puede pasar a otras dependencias de python como un *TemporaryFile*.
+
+## Manejando Errores
+Por defecto FastAPI atiende los errores básicos, como verbos de request no permitidos, requerimientos no cumplidos dentro de modelos y cosas así, para agregar errores customizados se utiliza la excepción `HTTPException`, la cual se declara como `raise HTTPException(status_code=404, detail="Detalles del error")` y FastAPI hará su magia. 
+> En `detail` puede ir cualquier estructura JSONizable, no solo un `str`
+
+Hay formas para hacer override de los handlers que se pueden leer en [la documentación](https://fastapi.tiangolo.com/tutorial/handling-errors/), no se mencionarán aquí ya que son casos muy especificos y personalmente, me da pereza.
+
+### Json Encoder
+FastAPI tiene un encoder para convertir modelos a *json*, te preguntarás ¿Qué diferencia hay con usar `.dict()`; pues esto es para todas las variables no *jsonizables* como datetimes o decimales. `from fastapi.encoder import jsonable_encoder`
+
+## Dependencias
+¿Qué es una *inyección de dependencias*?
+
+Supongamos que necesitas una cierta lógica para un grupo de requests, ya que todas ellas tendrían una conexión a DB, necesitan los mismos parámetros, o bien, autenticaciones. Entonces se pueden definir lineas de código como *dependencias* que pueden ser heredadas (en el sentido que FastAPI hará todo lo necesario para que puedas leerlas).
+
+Esto es util para minimizar el codigo, o al menos evitar duplicación del mismo.
+
+Para utlizar dependencias, se utiliza `Depends`, que aunque pinta como `Body` o `Query`, tiene un funcionamiento distinto; este recibe una función la cual *mapea* e inyecta como variable dentro de la función donde está siendo inyectado
+
+### Path Dependencies
+
+En este primer ejemplo se utiliza este feature para capturar parámetros dentro de una función.
+
+```
+async def common_parrameters(q: Optional[str] = None, skip: int = 0, limit: int = 10):
+    return {'q': q, 'skip': skip, 'limit': limit}
+
+@app.get('/dependency/items/')
+async def read_items(commons: dict = Depends(common_parrameters)):
+    return commons
+
+@app.get('/dependency/users/')
+async def read_users(commons: dict = Depends(common_parrameters)):
+    return commons
+```
+
+## Routing
+A diferencia de *django*, no hay como tal una estructura de como se debe de organizar FastAPI, sin embargo la documentación recomienda una estructura como en el ejemplo
+
+```
+├── app
+│   ├── __init__.py
+│   ├── main.py
+│   ├── dependencies.py
+│   └── routers
+│   │   ├── __init__.py
+│   │   ├── items.py
+│   │   └── users.py
+│   └── internal
+│       ├── __init__.py
+│       └── admin.py
 ```
