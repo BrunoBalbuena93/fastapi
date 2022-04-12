@@ -1,5 +1,5 @@
 from fastapi import APIRouter, status, Form, Depends
-from app.dependencies import common_parrameters
+from app.dependencies import CommonQueryParams
 from app.models.users import User, UserOut
 
 router = APIRouter()
@@ -17,5 +17,5 @@ async def read_form_data(
 
 # Utilizando dependencias
 @router.get('/users/')
-async def read_users(commons: dict = Depends(common_parrameters)):
+async def read_users(commons: CommonQueryParams = Depends(CommonQueryParams)):
     return commons

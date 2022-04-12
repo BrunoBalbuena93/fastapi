@@ -220,17 +220,64 @@ Para utlizar dependencias, se utiliza `Depends`, que aunque pinta como `Body` o 
 
 En este primer ejemplo se utiliza este feature para capturar parámetros dentro de una función.
 
+Ejemplo de dependencia como función en [dependencies](app/dependencies.py)
 ```
 async def common_parrameters(q: Optional[str] = None, skip: int = 0, limit: int = 10):
     return {'q': q, 'skip': skip, 'limit': limit}
-
-@app.get('/dependency/items/')
+```
+Dependencia siendo usada en [items](app/routers/items.py)
+```
+@router.get('/')
 async def read_items(commons: dict = Depends(common_parrameters)):
     return commons
-
-@app.get('/dependency/users/')
+```
+Dependencia siendo usada en [users](app/routers/users.py)
+```
+@router.get('/users/')
 async def read_users(commons: dict = Depends(common_parrameters)):
     return commons
+```
+
+Y así como pueden funciones, también pueden ser clases. El funcionamiento es el mismo, solamente al instanciarse se cambia un poco la estructura
+```
+class CommonQueryParams:
+    def __init__(self, q: Optional[str] = None, skip: int = 0, limit: int = 100):
+        self.q = q
+        self.skip = skip
+        self.limit = limit
+
+@router.get('/users/')
+async def read_users(commons: CommonQueryParams = Depends(CommonQueryParams)):
+    return commons
+```
+> **Subdependencias** Dado que su programación es inyectable, se pueden anidar dependencias entre si, es decir, una dependencia puede tener a su vez una dependencia interna y así tantas veces sean necesarias.
+
+### Dependencias como middlewares
+Quizá no sea la mejor forma de definirlo, pero pareciese que funciona como tal.
+
+Supongamos que no queremos obtener información sobre los datos que recoge, sino que queremos validar cierta información (por ejemplo, que un usuario esté autenticado). Entonces hacemos uso de un `raise HTTPException`, el cual hará que la solicitud no llegue a donde está queriendo llegar, y obteniendo un mensaje determinado. Tal como un *middleware*
+
+```
+from fastapi import Depends, FastAPI, Header, HTTPException
+
+app = FastAPI()
+
+
+async def verify_token(x_token: str = Header(...)):
+    if x_token != "fake-super-secret-token":
+        raise HTTPException(status_code=400, detail="X-Token header invalid")
+
+
+async def verify_key(x_key: str = Header(...)):
+    if x_key != "fake-super-secret-key":
+        raise HTTPException(status_code=400, detail="X-Key header invalid")
+    return x_key
+
+
+@app.get("/items/", dependencies=[Depends(verify_token), Depends(verify_key)])
+async def read_items():
+    return [{"item": "Foo"}, {"item": "Bar"}]
+
 ```
 
 ## Routing
@@ -249,3 +296,30 @@ A diferencia de *django*, no hay como tal una estructura de como se debe de orga
 │       ├── __init__.py
 │       └── admin.py
 ```
+Para este proyecto ejemplo se sigue algo similar.
+
+### Definiendo rutas
+Similar a como se haría en un mismo archivo, se definen con un decorador sobre la función a ejecutar, la diferencia es que ahora no se usa `@app` sino `@router` con un router previamente definido.
+
+Para el ejemplo usaremos el [routers/items.py](app/routers/items.py). 
+```
+router = APIRouter(
+    prefix='/items',
+    responses={404: {'description': 'Not Found'}}
+)
+
+
+@router.post('/')
+async def create_item(item: Item):
+    return item
+```
+Donde se define el prefijo que tendrán todas las rutas de este path, también es posible denotar los tipos de responses que pueda tener (como un 404 en el ejemplo), tags y dependencias al igual que se haría con `@app`.
+
+Y para poder ser utilizado en la aplicación, solo hace falta agregar en [app/main.py](app/main.py)
+```
+from .routers import items
+app = FastAPI()
+app.include_router(items.router)
+```
+
+Con esto se cubre lo básico de routing, si quieres saber más, la documentación está [aqui](https://fastapi.tiangolo.com/tutorial/bigger-applications/#include-the-same-router-multiple-times-with-different-prefix)
