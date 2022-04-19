@@ -280,8 +280,97 @@ async def read_items():
 
 ```
 
+## Dependencia Global
+
+Como se mencionó arriba, las dependencias pueden ser incluidas en cualquier router o función, en caso que deseemos incluirlas de manera global en la aplicación al denotarlas en el constructor de la aplicación
+```
+app = FastAPI(dependencies=[Depends(verify_token), Depends(verify_key)])
+```
+
+## Dependencias con Yield
+Dependencias que queremos que hagan algunas cosas después de retornar un valor, en estos casos usamos `yield`, que permite regresar el valor y seguir la ejecución del código, como por ejemplo, para la conexión de una base de datos, se esperaría obtener la conexión y al concluir lo que se debe hacer, cerrarla.
+
+Un ejemplo de esto
+```
+async def get_db():
+    db = DBSession()
+    try:
+        yield db
+    finally:
+        db.close()
+```
+En el ejemplo se ve un try → finally, esto se debe a que si en la ejecución del código intermedio, ya sea otra dependencia o la función como tal se presenta una excepción, estemos seguros de "cerrar" el hilo respecto a la dependencia aquí mencionada, la conexión a base de datos.
+> Después de un yield no se puede levantar un `HTTPException`, ya que se ejecuta una vez enviada la respuesta
+
+## Seguridad
+FastAPI tiene soporte para varios tipos de autenticaciones. Se mencionarán los principales y se incluyen en [`app/authentication.py`](app/authentication.py)
+### Oauth2
+Es ampliamente usado por *third party packages* como *facebook* o *github* (o bien, una forma de la misma). Está incluida en la parte de de `fastapi.security`.
+
+#### Flujo de contraseña
+Dado que en este punto todavía no hay una base de datos conectada, vamos a *mockear* el sistema para ver funcionar el flujo de las contraseñas.
+
+Siguiendo el ejemplo dispuesto en la documentación, se utilizan las siguientes funciones:
+
+```
+def get_user(db, username: str) -> UserInDB:
+    if username in db:
+        userdict = db.get(username)
+        return UserInDB(**userdict)
+
+def fake_decode_token(token):
+    # This doesn't provide any security at all
+    # Check the next version
+    user = get_user(fake_users_db, token)
+    return user
+
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    user = fake_decode_token(token)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return user
+
+
+async def get_current_active_user(current_user: User = Depends(get_current_user)):
+    if current_user.disabled:
+        raise HTTPException(status_code=400, detail="Inactive user")
+    return current_user
+
+
+@router.post("/token")
+async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    user_dict = fake_users_db.get(form_data.username)
+    if not user_dict:
+        raise HTTPException(status_code=400, detail="Incorrect username or password")
+    user = UserInDB(**user_dict)
+    hashed_password = fake_hash_password(form_data.password)
+    if not hashed_password == user.hashed_password:
+        raise HTTPException(status_code=400, detail="Incorrect username or password")
+
+    return {"access_token": user.username, "token_type": "bearer"}
+```
+
+Y la lógica es la siguiente:
+1. Al consumir `/token` primero se obtiene el objeto del usuario que está tratando de loggearse, en el ejemplo se usa data mockeada, en una aplicación se haría la consulta a base de datos para obtener esta información. En caso de no existir, se regresa una excepción con error 400
+2. Paralelamente, se hace una instancia del modelo `UserInDB` con la forma que se envía.
+3. Se hace la validación de contraseña, en este caso con `fake_hash_password` para comparar con la almacenada en la base de datos.
+4. En caso de que las contraseñas sean las mismas, lo loggea
+
+## Dependencias para JWT
+```
+pip install "python-jose[cryptography]"
+pip install "passlib[bcrypt]"
+```
+
+> Se usa el argumento `sub` al crear el access_token para identificar ese _algo_ que lo hace distinto, como el nombre de usuario
+
+
 ## Routing
-A diferencia de *django*, no hay como tal una estructura de como se debe de organizar FastAPI, sin embargo la documentación recomienda una estructura como en el ejemplo
+A diferencia de *django*, no hay como tal una estructura de como se debe de organizar FastAPI, sin embargo la documentación recomienda una estructura como en el ejemplo 
 
 ```
 ├── app

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Body, Depends
 from app.dependencies import common_parrameters
+from app.authentication import oauth2_scheme
 from app.models.items import Item
 from app.models.users import User
 
@@ -14,7 +15,7 @@ async def create_item(item: Item):
     return item
 
 @router.get('/')
-async def read_items(commons: dict = Depends(common_parrameters)):
+async def read_items(commons: dict = Depends(oauth2_scheme)):
     return commons
 
 @router.post('/{item_id}')
