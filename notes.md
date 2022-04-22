@@ -360,14 +360,47 @@ Y la lógica es la siguiente:
 3. Se hace la validación de contraseña, en este caso con `fake_hash_password` para comparar con la almacenada en la base de datos.
 4. En caso de que las contraseñas sean las mismas, lo loggea
 
+### Dejando la implementación rudimentaria
+Se puede (y sugiere) usar las bibliotecas existentes para encriptado de contraseñas, tales como `bcrypt`, con la que podemos reproducir una encriptación practicamente igual a la de Django o Flask.
+
+También podemos configurar el uso de tokens del tipo _JWT_ para la autenticación utilizando una llave (que puedes generar usando `openssl rand -hex 32`), un algoritmo de encriptación (usualmente el `HS256`) y un tiempo de vida definido como `timedelta`
+
 ## Dependencias para JWT
 ```
 pip install "python-jose[cryptography]"
 pip install "passlib[bcrypt]"
 ```
 
+Utilizando `CryptoContext` generas el esquema de encriptación para las contraseñas, el cual se encarga de la validación 
+
 > Se usa el argumento `sub` al crear el access_token para identificar ese _algo_ que lo hace distinto, como el nombre de usuario
 
+## Middlewares
+
+#### Repasando un poco
+Un _middleware_ es una función (o conjuto de ellas) que se ejecutan para cada request antes de ser procesada por algun _path_, ejecutar el proceso del _path_ y retomarla para ejecutar otra función antes de enviar la respuesta.
+
+## Bases de datos
+
+### Relacionales
+Inicialmente se describirá el flujo con SQLAlchemy, pero cabe destacar la existencia de [SQLModel](https://sqlmodel.tiangolo.com/), que es un ORM sobre `SQLAlchemy` y `Pydantic`
+
+> Uno de los ORM utilizados por FastAPI es `SQLAlchemy`, sin embargo hay otros ORM como `SQLModel` o `Peewee`
+
+### SQLAlchemy
+
+Inicialmente hay que crear el _engine_ de sqlalchemy con el que se comunicará con la base de datos, así como un generador de `SessionLocal`, donde cada instancia es una sesión, i.e., _SessionLocal_ generará las sesiones de la aplicación, y por ultimo un modelo Base, el cual será el objeto del cual heredarán los modelos de la base de datos.
+
+> Para este ejemplo, conectaremos con una base _SQLite_ para fines prácticos
+
+#### Generando modelos
+Todo modelo debe heredar del modelo `Base` que se define en las configuraciones de [database](/app/orm/database.py). En ese archivo también se incluye el generador de sesiones y la conexión a la base.
+
+Para crear los modelos, se identifican las columnas, el tipo de datos que contendrán y las relaciones que hay entre ellas.
+
+- Los **Pydantic Models** son representaciones de estos modelos, podría decirse que son los esquemas, y pueden  tener los mismos campos que el modelo en cuestión, sin embargo puedes tener más de un schema por tabla. 
+- Estos modelos tienen una clase `Config` (algo así como `Meta` en Django) donde se define `orm_mode=True`, esto le indica al ORM que debe leerlo como objeto y no como diccionario. Esto es importante porque SQLAlchemy carga solo la información requerida en el momento, i.e., lazy loading, a menos que se le pidan los elementos relacionados con este objeto, este no los cargará.
+- 
 
 ## Routing
 A diferencia de *django*, no hay como tal una estructura de como se debe de organizar FastAPI, sin embargo la documentación recomienda una estructura como en el ejemplo 
@@ -412,3 +445,13 @@ app.include_router(items.router)
 ```
 
 Con esto se cubre lo básico de routing, si quieres saber más, la documentación está [aqui](https://fastapi.tiangolo.com/tutorial/bigger-applications/#include-the-same-router-multiple-times-with-different-prefix)
+
+## Background Tasks
+Se pueden definir tareas en segundo plano para ejecutarse una vez que se ha mandado la respuesta, lo cual es útil para notificaciones por e-mail, procesamiento de datos (carga de archivos grandes) entre otros.
+
+Primero se debe importar `BackgroundTasks` de `fastapi` e incluirla como parámetro de las funciones, de esta manera _fastapi_ generará la instancia para ejecutar.
+
+Una vez que se decida solicitar la función, simplemente hay mandarla llamar dentro de la path function donde hay que agregar la función a ejecutar y los argumentos que recibirá.
+```
+backgroud_instance.add_task(function, *args)
+```
