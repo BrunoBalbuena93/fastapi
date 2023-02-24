@@ -1,10 +1,10 @@
 from dataclasses import dataclass
 from os import getenv
-app_name = 'bookstore'
+app_name = 'clothes'
 
 from dotenv import load_dotenv
 # Import env variables
-load_dotenv(f'{app_name}.env')
+load_dotenv()
 
 @dataclass
 class PostgresqlConfig:
@@ -12,7 +12,7 @@ class PostgresqlConfig:
     port: int = getenv('DB_PORT', 5432)
     user: str = getenv('DB_USER')
     password: str = getenv('DB_PASSWORD')
-    database: str = getenv('DB_NAME', 'bookstore_fastapi')
+    database: str = getenv('DB_NAME', app_name)
 
     @property
     def db_url(self) -> str:
